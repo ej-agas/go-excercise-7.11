@@ -30,7 +30,10 @@ func main() {
 	}
 
 	http.HandleFunc("/", db.list)
-	http.HandleFunc("/add-item", db.add)
+	http.HandleFunc("/show", db.show)
+	http.HandleFunc("/create", db.create)
+	http.HandleFunc("/update", db.update)
+	http.HandleFunc("/delete", db.delete)
 
 	log.Fatal(http.ListenAndServe("localhost:4000", nil))
 }
@@ -41,7 +44,21 @@ func (db database) list(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(db)
 }
 
-func (db database) add(w http.ResponseWriter, r *http.Request) {
+func (db database) show(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+
+	item := r.URL.Query().Get("item")
+
+	if _, exists := db[item]; !exists {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ResponseMsg{"item not found", http.StatusNotFound})
+		return
+	}
+
+	json.NewEncoder(w).Encode(db[item])
+}
+
+func (db database) create(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 
 	name := r.URL.Query().Get("name")
@@ -61,7 +78,7 @@ func (db database) add(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := db[name]; ok {
+	if _, exists := db[name]; exists {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		json.NewEncoder(w).Encode(ResponseMsg{fmt.Sprintf("item %s already exists", name), http.StatusUnprocessableEntity})
 		return
@@ -69,4 +86,64 @@ func (db database) add(w http.ResponseWriter, r *http.Request) {
 
 	db[name] = Item{Name: name, Price: price, Quantity: quantity}
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (db database) update(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+
+	name := r.URL.Query().Get("item")
+
+	if _, exists := db[name]; !exists {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ResponseMsg{"item not found", http.StatusNotFound})
+		return
+	}
+
+	item := db[name]
+
+	price := r.URL.Query().Get("price")
+	if price != "" {
+		price, err := strconv.Atoi(r.URL.Query().Get("price"))
+
+		if err != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(ResponseMsg{"invalid price", http.StatusUnprocessableEntity})
+			return
+		}
+
+		item.Price = price
+	}
+
+	quantity := r.URL.Query().Get("quantity")
+	if quantity != "" {
+		quantity, err := strconv.Atoi(r.URL.Query().Get("quantity"))
+
+		if err != nil {
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			json.NewEncoder(w).Encode(ResponseMsg{"invalid quantity", http.StatusUnprocessableEntity})
+			return
+		}
+
+		item.Quantity = quantity
+	}
+
+	db[item.Name] = item
+
+	json.NewEncoder(w).Encode(item)
+}
+
+func (db database) delete(w http.ResponseWriter, r *http.Request) {
+	w.Header().Add("Content-Type", "application/json")
+
+	item := r.URL.Query().Get("item")
+
+	if _, exists := db[item]; !exists {
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ResponseMsg{"item not found", http.StatusNotFound})
+		return
+	}
+
+	delete(db, item)
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(ResponseMsg{"item deleted", http.StatusAccepted})
 }
